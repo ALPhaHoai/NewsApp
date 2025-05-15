@@ -9,6 +9,7 @@ module.exports = {
           '@components': './components',
           '@utils': './utils',
           '@store': './store',
+          '@type': './type',
         },
       },
     ],

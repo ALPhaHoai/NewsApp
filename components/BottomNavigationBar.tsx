@@ -1,7 +1,8 @@
-import React, {useState} from 'react';
+import React from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Svg, {Path, Rect, Circle} from 'react-native-svg';
-import useNavigationStore from "@store/useNavigationStore.ts";
+import useNavigationStore from '@store/useNavigationStore.ts';
+import {BottomNavigationBarProps, TabType} from "@type/types.ts";
 
 // SVG ICONS
 const NewsIcon = ({color}: { color: string }) => (
@@ -38,10 +39,6 @@ const GridIcon = ({color}: { color: string }) => (
     </Svg>
 );
 
-type TabType = {
-    label: string;
-    Icon: React.ComponentType<{ color: string }>;
-};
 
 const TABS: TabType[] = [
     {label: 'Tin tức', Icon: NewsIcon},
@@ -49,11 +46,6 @@ const TABS: TabType[] = [
     {label: 'Xu hướng', Icon: TrendingIcon},
     {label: 'Tiện ích', Icon: GridIcon},
 ];
-
-type BottomNavigationBarProps = {
-    initialTabIndex?: number;
-    onTabPress?: (index: number) => void;
-};
 
 const BottomNavigationBar: React.FC<BottomNavigationBarProps> = ({
                                                                      initialTabIndex = 0,
@@ -64,7 +56,9 @@ const BottomNavigationBar: React.FC<BottomNavigationBarProps> = ({
 
     const handleTabPress = (index: number) => {
         setActiveTab(index);
-        if (onTabPress) onTabPress(index);
+        if (onTabPress) {
+            onTabPress(index);
+        }
     };
 
     return (

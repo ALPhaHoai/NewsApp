@@ -1,12 +1,8 @@
 import React, {memo} from 'react';
 import {Image, ImageStyle, StyleSheet, Text, TouchableOpacity, View, ViewStyle} from 'react-native';
 import Svg, {Circle, Rect} from 'react-native-svg';
-import {NewsItemType} from '../types';
+import {NewsItemProps} from '@type/types.ts';
 
-type Props = {
-    item: NewsItemType;
-    onPress?: () => void;
-};
 
 const DefaultNewsSvg = () => (
     <Svg width={100} height={80} viewBox="0 0 100 80">
@@ -18,7 +14,7 @@ const DefaultNewsSvg = () => (
     </Svg>
 );
 
-const NewsItem: React.FC<Props> = ({item, onPress}) => {
+const NewsItem: React.FC<NewsItemProps> = ({item, onPress}) => {
     // Supports enclosure?.@_url as fallback for RSS feeds
     const mainImage = item.image || item.enclosure?.['@_url'];
 

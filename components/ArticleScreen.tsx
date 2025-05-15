@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
     View,
     Text,
@@ -8,75 +8,84 @@ import {
     TouchableOpacity,
     SafeAreaView,
     Share,
-    Dimensions,
     Linking,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Tts from 'react-native-tts';
 import axios from 'axios';
 import TTSButton from '@components/TTSButton.tsx';
-
+import ArticleBody from '@components/ArticleBody.tsx';
+import {ArticleItem, ParagraphItem} from '@type/types.ts';
 
 const PAUSE_MS = 1100;
 
-// --------- TYPES ---------
-export type ArticleItem =
-    | { type: 'paragraph'; text: string }
-    | { type: 'image'; src: string; alt?: string; caption?: string };
 
 // --------- MAIN COMPONENTS ---------
 const ArticleScreen: React.FC<any> = ({route, navigation}) => {
     const {item} = route.params;
     const [reading, setReading] = useState(false);
+    const readingRef = useRef(reading);
     const [items, setItems] = useState<ArticleItem[] | null>(null);
-
+    const [currentSpokenId, setCurrentSpokenId] = useState<string | null>(null);
     const mainImage = item.image || item.enclosure?.['@_url'];
+
+    useEffect(() => {
+        readingRef.current = reading;
+    }, [reading]);
 
     const onSpeak = async () => {
         if (!items) return;
-        const paragraphs = [
-            item.title,
-            ...(items.filter(i => i.type === 'paragraph').map(i => (i as any).text) as string[]),
-        ].filter(Boolean);
 
-        if (!paragraphs.length) return;
+        const speakableItems: ParagraphItem[] = [
+            ...(items.filter(isParagraph).map(i => ({
+                id: i.id!,
+                text: i.text,
+                type: 'paragraph' as const,  // Add the type property!
+            })))
+        ].filter(i => i.text);
 
-        Tts.stop();
+        if (!speakableItems.length) return;
+
+        await Tts.stop();
         setReading(true);
+        readingRef.current = true;
 
         let idx = 0;
 
-        const speakNext = () => {
+        const speakNext = async () => {
             // If already stopped, bail out
-            if (!reading) {
-                Tts.stop();
+            if (!readingRef.current) {
+                await Tts.stop();
                 Tts.removeAllListeners('tts-finish');
                 setReading(false);
+                setCurrentSpokenId(null);
                 return;
             }
-            if (idx < paragraphs.length) {
-                Tts.speak(paragraphs[idx]);
+            if (idx < speakableItems.length) {
+                setCurrentSpokenId(speakableItems[idx].id);
+                Tts.speak(speakableItems[idx].text);
                 idx++;
             } else {
-                // Done
                 Tts.removeAllListeners('tts-finish');
                 setReading(false);
+                setCurrentSpokenId(null);
             }
         };
 
         const onFinish = () => {
-            if (idx < paragraphs.length) {
+            if (idx < speakableItems.length) {
                 setTimeout(speakNext, PAUSE_MS);
             } else {
                 Tts.removeAllListeners('tts-finish');
                 setReading(false);
+                setCurrentSpokenId(null);
             }
         };
 
         Tts.removeAllListeners('tts-finish');
         Tts.addEventListener('tts-finish', onFinish);
 
-        speakNext();
+        await speakNext();
     };
 
 
@@ -84,6 +93,7 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
         Tts.stop();
         setReading(false);
         Tts.removeAllListeners('tts-finish');
+        setCurrentSpokenId(null);
     };
 
     const onShare = async () => {
@@ -108,7 +118,18 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
             }
             if (!result) return;
             const contentItems = extractOrderedArticleContent(result);
-            if (contentItems?.length) setItems(contentItems);
+            if (contentItems?.length) {
+                // Assign unique id for each item
+                let paraCount = 1, imgCount = 1;
+                const contentItemsWithId = contentItems.map(c => ({
+                    ...c,
+                    id:
+                        c.type === "paragraph"
+                            ? `paragraph_${paraCount++}`
+                            : `image_${imgCount++}`
+                }));
+                setItems(contentItemsWithId);
+            }
         })();
     }, [item.link]);
 
@@ -143,7 +164,10 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
                 </View>
 
                 {items?.length ? (
-                    <ArticleBody items={items}/>
+                    <ArticleBody
+                        items={items}
+                        currentSpokenId={currentSpokenId}
+                    />
                 ) : item.description ? (
                     <Text style={styles.desc}>{removeTags(item.description)}</Text>
                 ) : null}
@@ -175,52 +199,6 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
     );
 };
 
-// Separated body renderer for clarity
-const ArticleBody: React.FC<{ items: ArticleItem[] }> = ({items}) => (
-    <View style={{padding: 16}}>
-        {items.map((item, idx) =>
-            item.type === 'paragraph' ? (
-                <Text
-                    key={idx}
-                    style={{
-                        fontSize: 17,
-                        marginBottom: 15,
-                        color: '#222',
-                        lineHeight: 26,
-                    }}
-                >
-                    {item.text}
-                </Text>
-            ) : (
-                <View key={idx} style={{alignItems: 'center', marginBottom: 18}}>
-                    <Image
-                        source={{uri: item.src}}
-                        style={{
-                            width: Dimensions.get('window').width - 40,
-                            height: 200,
-                            backgroundColor: '#eee',
-                            borderRadius: 12,
-                        }}
-                        resizeMode="cover"
-                    />
-                    {!!item.caption && (
-                        <Text
-                            style={{
-                                color: '#888',
-                                fontSize: 14,
-                                marginTop: 6,
-                                fontStyle: 'italic',
-                                textAlign: 'center',
-                            }}
-                        >
-                            {item.caption}
-                        </Text>
-                    )}
-                </View>
-            )
-        )}
-    </View>
-);
 
 const styles = StyleSheet.create({
     topBar: {
@@ -281,40 +259,26 @@ const styles = StyleSheet.create({
         marginBottom: 7,
     },
     linkBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
         marginLeft: 12,
         marginVertical: 16,
     },
     linkText: {
-        color: '#039ed8',
+        color: "#039ed8",
         fontSize: 15,
-        fontWeight: '500',
+        fontWeight: "500",
         marginLeft: 6,
-        textDecorationLine: 'underline',
+        textDecorationLine: "underline",
     },
     ttsBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
         padding: 10,
         borderTopWidth: 1,
-        borderTopColor: '#eee',
-        backgroundColor: '#fff',
-    },
-    ttsBtn: {
-        backgroundColor: '#F5FAFD',
-        borderRadius: 18,
-        paddingHorizontal: 24,
-        paddingVertical: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    ttsTxt: {
-        marginLeft: 9,
-        color: '#039ed8',
-        fontWeight: '700',
-        fontSize: 16,
+        borderTopColor: "#eee",
+        backgroundColor: "#fff",
     },
 });
 
@@ -400,6 +364,14 @@ export function extractOrderedArticleContent(html: string): ArticleItem[] {
         }
     }
     return result;
+}
+
+export function isParagraph(item: ArticleItem): item is ParagraphItem {
+    return item.type === 'paragraph';
+}
+
+export function isImage(item: ArticleItem): item is ImageItem {
+    return item.type === 'image';
 }
 
 export default ArticleScreen;

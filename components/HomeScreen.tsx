@@ -12,7 +12,7 @@ import Tts from 'react-native-tts';
 
 import {fetchRssData} from '../utils/rss';
 import {getAllNews, initNewsTable, insertNewsBatch, openDB} from '../db';
-import {NewsItemType} from '../types';
+import {NewsItemType} from '@type/types.ts';
 
 import NewsSectionTabs from './NewsSectionTabs';
 import NewsItem from './NewsItem';
