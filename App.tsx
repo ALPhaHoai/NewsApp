@@ -1,131 +1,161 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, {useEffect, useState} from 'react';
+import {FlatList, SafeAreaView, StatusBar, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Tts from 'react-native-tts';
+import {fetchRssData} from './utils/rss.ts';
+import {getAllNews, initNewsTable, insertNewsBatch, openDB} from './db.ts';
+import {NewsItemType} from './types.ts';
+import NewsSectionTabs from '@components/NewsSectionTabs';
+import NewsItem from '@components/NewsItem';
+import BottomNavigationBar from "@components/BottomNavigationBar.tsx";
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+const rssLinks = [
+    "https://vnexpress.net/rss/tin-moi-nhat.rss",
+    "https://vnexpress.net/rss/the-gioi.rss",
+    "https://vnexpress.net/rss/thoi-su.rss",
+    "https://vnexpress.net/rss/kinh-doanh.rss",
+    "https://vnexpress.net/rss/startup.rss",
+    "https://vnexpress.net/rss/giai-tri.rss",
+    "https://vnexpress.net/rss/the-thao.rss",
+    "https://vnexpress.net/rss/phap-luat.rss",
+    "https://vnexpress.net/rss/giao-duc.rss",
+    "https://vnexpress.net/rss/tin-moi-nhat.rss",
+    "https://vnexpress.net/rss/tin-noi-bat.rss",
+    "https://vnexpress.net/rss/suc-khoe.rss",
+    "https://vnexpress.net/rss/gia-dinh.rss",
+    "https://vnexpress.net/rss/du-lich.rss",
+    "https://vnexpress.net/rss/khoa-hoc-cong-nghe.rss",
+    "https://vnexpress.net/rss/oto-xe-may.rss",
+    "https://vnexpress.net/rss/y-kien.rss",
+    "https://vnexpress.net/rss/tam-su.rss",
+    "https://vnexpress.net/rss/cuoi.rss",
+    "https://vnexpress.net/rss/tin-xem-nhieu.rss"
+];
 
-import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+const separator = () => <View style={styles.separator}/>;
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+const App: React.FC = () => {
+    const [data, setData] = useState<NewsItemType[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
 
-function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            const arrOfArr = await Promise.all(rssLinks.map(fetchRssData));
+            let allNews = arrOfArr.flatMap(news => news.items);
+            allNews = allNews.sort((a, b) => Date.parse(b.pubDate || "") - Date.parse(a.pubDate || ""));
+            const seen = new Set<string>();
+            allNews = allNews.filter(item => {
+                if (!item.id) return false;
+                if (seen.has(item.id)) return false;
+                seen.add(item.id);
+                return true;
+            });
+            await insertNewsBatch(allNews);
+            setData(allNews);
+        } catch (e) {}
+        setRefreshing(false);
+    };
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
+    // Set Vietnamese as default TTS language when app starts
+    useEffect(() => {
+        (async () => {
+            await Tts.setDefaultLanguage('vi-VN');
+        })();
 
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the recommendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
+        (async () => {
+            await openDB();
+            await initNewsTable();
+        })();
 
-  return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
-        </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
+        (async () => {
+            try {
+                const cachedNews = await getAllNews();
+                if (Array.isArray(cachedNews)) {
+                    setData(cachedNews);
+                }
+            } catch (e) {
+            }
+            setLoading(false); // Show immediately, even if empty
+        })();
+    }, []);
+
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const arrOfArr = await Promise.all(rssLinks.map(fetchRssData));
+                let allNews = arrOfArr.flatMap(news => news.items);
+                allNews = allNews.sort((a, b) => Date.parse(b.pubDate || "") - Date.parse(a.pubDate || ""));
+                const seen = new Set<string>();
+                allNews = allNews.filter(item => {
+                    if (!item.id) return false;
+                    if (seen.has(item.id)) return false;
+                    seen.add(item.id);
+                    return true;
+                });
+
+                await insertNewsBatch(allNews);
+
+                setData(allNews);
+            } catch (_) {
+            }
+            setLoading(false);
+        })();
+    }, []);
+
+
+    return (
+        <SafeAreaView style={styles.container}>
+            <StatusBar backgroundColor="#039ed8" barStyle="light-content"/>
+            {/* Top Navigation */}
+            <View style={styles.topBar}>
+                <Icon name="menu" size={28} color="#fff"/>
+                <NewsSectionTabs/>
+                <Icon name="magnify" size={28} color="#fff"/>
+                <Icon name="account-circle-outline" size={28} color="#fff"/>
+            </View>
+            {/* News List */}
+            {loading ? (
+                <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><Text>Loading...</Text></View>
+            ) : (
+                <FlatList
+                    contentContainerStyle={{paddingBottom: 80}}
+                    data={data}
+                    renderItem={({item}) => <NewsItem item={item}/>}
+                    keyExtractor={item => item.id.toString()}
+                    ItemSeparatorComponent={separator}
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                />
+            )}
+            {/* Bottom Navigation */}
+            <BottomNavigationBar/>
+        </SafeAreaView>
+    );
+};
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
-  },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
-  },
-  highlight: {
-    fontWeight: '700',
-  },
+    container: {
+        flex: 1,
+        backgroundColor: '#fff',
+    },
+    topBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#039ed8',
+        paddingHorizontal: 12,
+        paddingVertical: 14,
+        justifyContent: 'space-between',
+    },
+    separator: {
+        height: 1,
+        backgroundColor: '#f2f2f2',
+        marginLeft: 12,
+        marginRight: 12,
+    },
 });
 
 export default App;
