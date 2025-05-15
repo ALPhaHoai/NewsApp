@@ -1,15 +1,17 @@
 import React, {forwardRef, useImperativeHandle, useRef, useState} from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
+  Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  LayoutChangeEvent,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import {ArticleBodyProps, ArticleBodyRef} from '@type/types.ts';
 import ImageWithZoomAndDownload from '@components/ImageWithZoomAndDownload.tsx';
+
+const {width, height} = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {padding: 16},
@@ -33,8 +35,9 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   image: {
-    width: '100%',
-    height: 200,
+    width: width - 20,
+    minHeight: 200,
+    height: '100%',
     backgroundColor: '#eee',
     borderRadius: 12,
   },
@@ -95,7 +98,7 @@ const ArticleBody = forwardRef<ArticleBodyRef, ArticleBodyProps>(
         onLayout={e =>
           setScrollState(state => ({
             ...state,
-            viewportHeight: e.nativeEvent.layout.height,
+            viewportHeight: e.nativeEvent?.layout?.height,
           }))
         }
         scrollEventThrottle={16}>
@@ -134,7 +137,7 @@ const ArticleBody = forwardRef<ArticleBodyRef, ArticleBodyProps>(
               <ImageWithZoomAndDownload
                 source={{uri: item.src}}
                 style={styles.image}
-                resizeMode="cover"
+                resizeMode="contain"
                 fallbackTitle={article.title}
                 caption={item.caption}
               />

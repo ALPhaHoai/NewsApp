@@ -98,6 +98,28 @@ export function parseVnExpress(html?: string | null): ParsedVnExpressArticle {
           });
         }
       }
+
+      if (node.attribs?.class?.includes('item_slide_show')) {
+        for (const child of node.children ?? []) {
+          if (
+            child &&
+            child.attribs?.class?.includes('block_thumb_slide_show')
+          ) {
+            const src = child.attribs['data-src'];
+            const captionNode = selectOne('.desc_cation', child);
+            const caption = captionNode ? getText(captionNode).trim() : '';
+
+            if (src) {
+              content.push({
+                type: 'image',
+                id: `image_${imgCount++}`,
+                src,
+                caption,
+              });
+            }
+          }
+        }
+      }
     }
   }
 
