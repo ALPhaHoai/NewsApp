@@ -14,7 +14,10 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Tts from 'react-native-tts';
 import axios from 'axios';
-import TTSButton from "@components/TTSButton.tsx";
+import TTSButton from '@components/TTSButton.tsx';
+
+
+const PAUSE_MS = 1100;
 
 // --------- TYPES ---------
 export type ArticleItem =
@@ -30,19 +33,57 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
     const mainImage = item.image || item.enclosure?.['@_url'];
 
     const onSpeak = async () => {
+        if (!items) return;
+        const paragraphs = [
+            item.title,
+            ...(items.filter(i => i.type === 'paragraph').map(i => (i as any).text) as string[]),
+        ].filter(Boolean);
+
+        if (!paragraphs.length) return;
+
         Tts.stop();
         setReading(true);
-        await Tts.speak(
-            item.title +
-            '. ' +
-            (removeTags(item.description) || removeTags(item.content) || '')
-        );
-        setReading(false);
+
+        let idx = 0;
+
+        const speakNext = () => {
+            // If already stopped, bail out
+            if (!reading) {
+                Tts.stop();
+                Tts.removeAllListeners('tts-finish');
+                setReading(false);
+                return;
+            }
+            if (idx < paragraphs.length) {
+                Tts.speak(paragraphs[idx]);
+                idx++;
+            } else {
+                // Done
+                Tts.removeAllListeners('tts-finish');
+                setReading(false);
+            }
+        };
+
+        const onFinish = () => {
+            if (idx < paragraphs.length) {
+                setTimeout(speakNext, PAUSE_MS);
+            } else {
+                Tts.removeAllListeners('tts-finish');
+                setReading(false);
+            }
+        };
+
+        Tts.removeAllListeners('tts-finish');
+        Tts.addEventListener('tts-finish', onFinish);
+
+        speakNext();
     };
+
 
     const onStop = () => {
         Tts.stop();
         setReading(false);
+        Tts.removeAllListeners('tts-finish');
     };
 
     const onShare = async () => {
@@ -126,8 +167,8 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
             <View style={styles.ttsBar}>
                 <TTSButton
                     reading={reading}
-                    onSpeak={() => setReading(true)}
-                    onStop={() => setReading(false)}
+                    onSpeak={onSpeak}
+                    onStop={onStop}
                 />
             </View>
         </SafeAreaView>
