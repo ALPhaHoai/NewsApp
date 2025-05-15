@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {
     View,
     Text,
@@ -14,6 +14,7 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Tts from 'react-native-tts';
 import axios from 'axios';
+import TTSButton from "@components/TTSButton.tsx";
 
 // --------- TYPES ---------
 export type ArticleItem =
@@ -21,8 +22,8 @@ export type ArticleItem =
     | { type: 'image'; src: string; alt?: string; caption?: string };
 
 // --------- MAIN COMPONENTS ---------
-const ArticleScreen: React.FC<any> = ({ route, navigation }) => {
-    const { item } = route.params;
+const ArticleScreen: React.FC<any> = ({route, navigation}) => {
+    const {item} = route.params;
     const [reading, setReading] = useState(false);
     const [items, setItems] = useState<ArticleItem[] | null>(null);
 
@@ -51,7 +52,8 @@ const ArticleScreen: React.FC<any> = ({ route, navigation }) => {
                 url: item.link,
                 title: item.title,
             });
-        } catch (e) {}
+        } catch (e) {
+        }
     };
 
     useEffect(() => {
@@ -70,26 +72,26 @@ const ArticleScreen: React.FC<any> = ({ route, navigation }) => {
     }, [item.link]);
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+        <SafeAreaView style={{flex: 1, backgroundColor: '#fff'}}>
             {/* Top Bar */}
             <View style={styles.topBar}>
                 <TouchableOpacity onPress={() => navigation.goBack()}>
-                    <Icon name="arrow-left" size={28} color="#fff" />
+                    <Icon name="arrow-left" size={28} color="#fff"/>
                 </TouchableOpacity>
                 <Text style={styles.heading} numberOfLines={1}>
                     Chi tiết
                 </Text>
                 <TouchableOpacity onPress={onShare}>
-                    <Icon name="share-variant" size={25} color="#fff" />
+                    <Icon name="share-variant" size={25} color="#fff"/>
                 </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }}>
+            <ScrollView style={{flex: 1}} contentContainerStyle={{paddingBottom: 40}}>
                 {mainImage ? (
-                    <Image source={{ uri: mainImage }} style={styles.image} resizeMode="cover" />
+                    <Image source={{uri: mainImage}} style={styles.image} resizeMode="cover"/>
                 ) : (
                     <View style={styles.noImage}>
-                        <Icon name="image" size={60} color="#ccc" />
+                        <Icon name="image" size={60} color="#ccc"/>
                     </View>
                 )}
 
@@ -100,7 +102,7 @@ const ArticleScreen: React.FC<any> = ({ route, navigation }) => {
                 </View>
 
                 {items?.length ? (
-                    <ArticleBody items={items} />
+                    <ArticleBody items={items}/>
                 ) : item.description ? (
                     <Text style={styles.desc}>{removeTags(item.description)}</Text>
                 ) : null}
@@ -114,7 +116,7 @@ const ArticleScreen: React.FC<any> = ({ route, navigation }) => {
                         style={styles.linkBtn}
                         onPress={() => Linking.openURL(item.link || item.url)}
                     >
-                        <Icon name="open-in-new" size={18} color="#039ed8" />
+                        <Icon name="open-in-new" size={18} color="#039ed8"/>
                         <Text style={styles.linkText}>Đọc bản đầy đủ trên web</Text>
                     </TouchableOpacity>
                 )}
@@ -122,25 +124,19 @@ const ArticleScreen: React.FC<any> = ({ route, navigation }) => {
 
             {/* TTS Controls */}
             <View style={styles.ttsBar}>
-                {!reading ? (
-                    <TouchableOpacity style={styles.ttsBtn} onPress={onSpeak}>
-                        <Icon name="volume-high" size={22} color="#039ed8" />
-                        <Text style={styles.ttsTxt}>Đọc tin</Text>
-                    </TouchableOpacity>
-                ) : (
-                    <TouchableOpacity style={[styles.ttsBtn, { backgroundColor: '#EAEDF0' }]} onPress={onStop}>
-                        <Icon name="stop" size={22} color="#d41515" />
-                        <Text style={[styles.ttsTxt, { color: '#d41515' }]}>Dừng</Text>
-                    </TouchableOpacity>
-                )}
+                <TTSButton
+                    reading={reading}
+                    onSpeak={() => setReading(true)}
+                    onStop={() => setReading(false)}
+                />
             </View>
         </SafeAreaView>
     );
 };
 
 // Separated body renderer for clarity
-const ArticleBody: React.FC<{ items: ArticleItem[] }> = ({ items }) => (
-    <View style={{ padding: 16 }}>
+const ArticleBody: React.FC<{ items: ArticleItem[] }> = ({items}) => (
+    <View style={{padding: 16}}>
         {items.map((item, idx) =>
             item.type === 'paragraph' ? (
                 <Text
@@ -155,9 +151,9 @@ const ArticleBody: React.FC<{ items: ArticleItem[] }> = ({ items }) => (
                     {item.text}
                 </Text>
             ) : (
-                <View key={idx} style={{ alignItems: 'center', marginBottom: 18 }}>
+                <View key={idx} style={{alignItems: 'center', marginBottom: 18}}>
                     <Image
-                        source={{ uri: item.src }}
+                        source={{uri: item.src}}
                         style={{
                             width: Dimensions.get('window').width - 40,
                             height: 200,
@@ -342,24 +338,24 @@ export function extractOrderedArticleContent(html: string): ArticleItem[] {
         const str = match[0];
         if (/^<p\b/i.test(str)) {
             const text = str.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-            if (text) result.push({ type: 'paragraph', text });
+            if (text) result.push({type: 'paragraph', text});
         } else if (/^<figure\b/i.test(str)) {
             const src = pickImageUrlFromBlock(str);
             const imgMatch = str.match(/<img[^>]+alt=['"]([^'"]*)['"]/i);
             const alt = imgMatch ? imgMatch[1] : '';
             const captionMatch = str.match(/<figcaption[^>]*>([\s\S]+?)<\/figcaption>/i);
             const caption = captionMatch ? captionMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-            if (src && !isSvgUrl(src)) result.push({ type: 'image', src, alt, caption });
+            if (src && !isSvgUrl(src)) result.push({type: 'image', src, alt, caption});
         } else if (/^<picture\b/i.test(str)) {
             const src = pickImageUrlFromBlock(str);
             const imgMatch = str.match(/<img[^>]+alt=['"]([^'"]*)['"]/i);
             const alt = imgMatch ? imgMatch[1] : '';
-            if (src && !isSvgUrl(src)) result.push({ type: 'image', src, alt });
+            if (src && !isSvgUrl(src)) result.push({type: 'image', src, alt});
         } else if (/^<img\b/i.test(str)) {
             const src = pickImageUrlFromBlock(str);
             const altMatch = str.match(/alt=['"]([^'"]*)['"]/i);
             const alt = altMatch ? altMatch[1] : '';
-            if (src && !isSvgUrl(src)) result.push({ type: 'image', src, alt });
+            if (src && !isSvgUrl(src)) result.push({type: 'image', src, alt});
         }
     }
     return result;
