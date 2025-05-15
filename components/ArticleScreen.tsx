@@ -17,40 +17,44 @@ import TTSButton from '@components/TTSButton.tsx';
 import ArticleBody from '@components/ArticleBody.tsx';
 import {
   ArticleBodyRef,
-  ArticleItem,
+  ArticleBodyItem,
   ImageItem,
   ParagraphItem,
   ParagraphSubText,
+  ParsedVnExpressArticle,
 } from '@type/types.ts';
-import {v4 as uuidv4} from 'uuid';
+import moment from 'moment';
+import {parseVnExpress} from '../parser/vneParser.ts';
 
 const PAUSE_MS = 1100;
 
 // --------- MAIN COMPONENTS ---------
 const ArticleScreen: React.FC<any> = ({route, navigation}) => {
-  const {item} = route.params;
+  const {article} = route.params;
   const [reading, setReading] = useState(false);
   const readingRef = useRef(reading);
-  const [items, setItems] = useState<ArticleItem[] | null>(null);
+  const [bodyItems, setBodyItems] = useState<ArticleBodyItem[] | null>(null);
   const [currentSpokenId, setCurrentSpokenId] = useState<string | null>(null);
   const [currentSpokenSubTextId, setCurrentSpokenSubTextId] = useState<
     string | null
   >(null);
   const articleBodyRef = useRef<ArticleBodyRef>(null);
 
-  const mainImage = item.image || item.enclosure?.['@_url'];
+  const time = article.time;
+
+  const mainImage = article.image || article.enclosure?.['@_url'];
 
   useEffect(() => {
     readingRef.current = reading;
   }, [reading]);
 
   const onSpeak = async () => {
-    if (!items) {
+    if (!bodyItems) {
       return;
     }
 
     const speakableItems: ParagraphItem[] = [
-      ...items.filter(isParagraph).map(i => ({
+      ...bodyItems.filter(isParagraph).map(i => ({
         ...i,
         id: i.id!,
         text: i.text,
@@ -137,9 +141,11 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
   const onShare = async () => {
     try {
       await Share.share({
-        message: `${item.title}\n\nĐọc bài tại: ${item.link || item.url || ''}`,
-        url: item.link,
-        title: item.title,
+        message: `${article.title}\n\nĐọc bài tại: ${
+          article.link || article.url || ''
+        }`,
+        url: article.link,
+        title: article.title,
       });
     } catch (e) {}
   };
@@ -148,7 +154,7 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
     (async () => {
       let result: string | null = null;
       try {
-        const res = await axios.get(item.link);
+        const res = await axios.get(article.link);
         result = res.data;
       } catch (e) {
         console.error(e);
@@ -156,13 +162,14 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
       if (!result) {
         return;
       }
-      const contentItems = extractOrderedArticleContent(result);
-      if (contentItems?.length) {
-        const contentItemsWithId = preprocessItems(contentItems);
-        setItems(contentItemsWithId);
+      const articleDetail = parseVnExpress(result);
+
+      if (articleDetail) {
+        preprocessItems(articleDetail);
+        setBodyItems(articleDetail.content);
       }
     })();
-  }, [item.link]);
+  }, [article.link]);
 
   return (
     <SafeAreaView style={{flex: 1, backgroundColor: '#fff'}}>
@@ -192,31 +199,32 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
           </View>
         )}
 
-        <Text style={styles.title}>{item.title}</Text>
+        <Text style={styles.title}>{article.title}</Text>
         <View style={styles.meta}>
-          <Text style={styles.source}>{item.source}</Text>
-          {item.time && <Text style={styles.time}>{item.time}</Text>}
+          <Text style={styles.source}>{article.source}</Text>
+          {time && <Text style={styles.time}>{moment(time).toString()}</Text>}
         </View>
 
-        {items?.length ? (
+        {bodyItems?.length ? (
           <ArticleBody
             ref={articleBodyRef}
-            items={items}
+            items={bodyItems}
             currentSpokenId={currentSpokenId}
             currentSpokenSubTextId={currentSpokenSubTextId}
+            article={article}
           />
-        ) : item.description ? (
-          <Text style={styles.desc}>{removeTags(item.description)}</Text>
+        ) : article.description ? (
+          <Text style={styles.desc}>{removeTags(article.description)}</Text>
         ) : null}
 
-        {item.content ? (
-          <Text style={styles.content}>{removeTags(item.content)}</Text>
+        {article.content ? (
+          <Text style={styles.content}>{removeTags(article.content)}</Text>
         ) : null}
 
-        {(item.link || item.url) && (
+        {(article.link || article.url) && (
           <TouchableOpacity
             style={styles.linkBtn}
-            onPress={() => Linking.openURL(item.link || item.url)}>
+            onPress={() => Linking.openURL(article.link || article.url)}>
             <Icon name="open-in-new" size={18} color="#039ed8" />
             <Text style={styles.linkText}>Đọc bản đầy đủ trên web</Text>
           </TouchableOpacity>
@@ -318,146 +326,26 @@ function removeTags(str?: string): string {
   return str ? str.replace(/<[^>]+>/g, '') : '';
 }
 
-function isSvgUrl(url: string): boolean {
-  if (!url) {
-    return false;
-  }
-  if (url.startsWith('data:image/svg')) {
-    return true;
-  }
-  const cleaned = url.split('?')[0].split('#')[0];
-  return cleaned.toLowerCase().endsWith('.svg');
-}
-
-/**
- * Given a data-srcset or srcset string, returns the best (highest res) image URL.
- * "Best" is usually the last in the list.
- */
-function pickBestSrcset(srcset: string): string | null {
-  if (!srcset) {
-    return null;
-  }
-  const urls = srcset
-    .split(',')
-    .map(s => s.trim())
-    .filter(s => !!s);
-  if (urls.length === 0) {
-    return null;
-  }
-  const last = urls[urls.length - 1];
-  const url = last.split(' ')[0];
-  return url;
-}
-
-/** Picks the preferred image URL from a block of HTML (figure, picture, or standalone img) */
-function pickImageUrlFromBlock(block: string): string | null {
-  // 1. Look for <source data-srcset="...">
-  const sourceMatch = block.match(/<source[^>]+data-srcset=['"]([^'"]+)['"]/i);
-  if (sourceMatch) {
-    const best = pickBestSrcset(sourceMatch[1]);
-    if (best && !isSvgUrl(best)) {
-      return best;
-    }
-  }
-  // fallback <img ... src="...">
-  const imgMatch = block.match(/<img[^>]+src=['"]([^'"]+)['"]/i);
-  if (imgMatch && !isSvgUrl(imgMatch[1])) {
-    const src = imgMatch[1];
-    if (!src.startsWith('data:image/gif;base64,R0lGODlhAQABAAAAA')) {
-      return src;
-    }
-  }
-  return null;
-}
-
-/**
- * Extracts ordered paragraphs and images from article HTML.
- * - Ignores SVG and invisible 1x1 GIFs.
- * - Handles <source data-srcset="..."> inside <figure>/<picture>
- */
-export function extractOrderedArticleContent(html: string): ArticleItem[] {
-  if (!html) {
-    return [];
-  }
-  const result: ArticleItem[] = [];
-  // Fixed: [^>]*
-  const regex =
-    /<p\b[^>]*>[\s\S]*?<\/p>|<figure\b[^>]*>[\s\S]*?<\/figure>|<picture\b[^>]*>[\s\S]*?<\/picture>|<img[\s\S]*?>/gi;
-  let match;
-  while ((match = regex.exec(html))) {
-    const str = match[0];
-    if (/^<p\b/i.test(str)) {
-      const text = str
-        .replace(/<[^>]+>/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (text) {
-        result.push({type: 'paragraph', text});
-      }
-    } else if (/^<figure\b/i.test(str)) {
-      const src = pickImageUrlFromBlock(str);
-      const imgMatch = str.match(/<img[^>]+alt=['"]([^'"]*)['"]/i);
-      const alt = imgMatch ? imgMatch[1] : '';
-      const captionMatch = str.match(
-        /<figcaption[^>]*>([\s\S]+?)<\/figcaption>/i,
-      );
-      const caption = captionMatch
-        ? captionMatch[1].replace(/<[^>]+>/g, '').trim()
-        : '';
-      if (src && !isSvgUrl(src)) {
-        result.push({type: 'image', src, alt, caption});
-      }
-    } else if (/^<picture\b/i.test(str)) {
-      const src = pickImageUrlFromBlock(str);
-      const imgMatch = str.match(/<img[^>]+alt=['"]([^'"]*)['"]/i);
-      const alt = imgMatch ? imgMatch[1] : '';
-      if (src && !isSvgUrl(src)) {
-        result.push({type: 'image', src, alt});
-      }
-    } else if (/^<img\b/i.test(str)) {
-      const src = pickImageUrlFromBlock(str);
-      const altMatch = str.match(/alt=['"]([^'"]*)['"]/i);
-      const alt = altMatch ? altMatch[1] : '';
-      if (src && !isSvgUrl(src)) {
-        result.push({type: 'image', src, alt});
-      }
-    }
-  }
-  return result;
-}
-
-export function isParagraph(item: ArticleItem): item is ParagraphItem {
+export function isParagraph(item: ArticleBodyItem): item is ParagraphItem {
   return item.type === 'paragraph';
 }
 
-export function isImage(item: ArticleItem): item is ImageItem {
+export function isImage(item: ArticleBodyItem): item is ImageItem {
   return item.type === 'image';
 }
 
-export function preprocessItems(items: ArticleItem[]): ArticleItem[] {
-  let paraCount = 1;
-  let imgCount = 1;
+export function preprocessItems(articleDetail: ParsedVnExpressArticle) {
   let subCount = 1;
 
-  return items.map(item => {
+  articleDetail.content?.forEach(item => {
     if (item.type === 'paragraph') {
-      const subTexts: ParagraphSubText[] = item.text
+      item.subTexts = item.text
         .split(/[,.]/)
         .map(s => ({
           text: s.trim(),
           id: (subCount++).toString(),
         }))
         .filter(sub => sub.text); // remove any empty splits
-      return {
-        ...item,
-        id: `paragraph_${paraCount++}`,
-        subTexts,
-      };
-    } else {
-      return {
-        ...item,
-        id: `image_${imgCount++}`,
-      };
     }
   });
 }

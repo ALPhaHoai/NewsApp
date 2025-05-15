@@ -1,17 +1,18 @@
-import { create } from 'zustand';
+import {create} from 'zustand';
+import {NewsItemType} from '@type/types.ts';
 
-type CounterState = {
-    count: number;
-    increment: () => void;
-    decrement: () => void;
-    set: (n: number) => void;
+type StoreState = {
+  homeLoading: boolean;
+  data: NewsItemType[];
+  setData: (data: NewsItemType[]) => void;
+  setHomeLoading: (isLoading: boolean) => void;
 };
 
-const useCounterStore = create<CounterState>((set) => ({
-    count: 0,
-    increment: () => set((state) => ({ count: state.count + 1 })),
-    decrement: () => set((state) => ({ count: state.count - 1 })),
-    set: (n) => set({ count: n }),
+const useStore = create<StoreState>(set => ({
+  homeLoading: false,
+  data: [],
+  setData: data => set({data: data}),
+  setHomeLoading: isLoading => set({homeLoading: !!isLoading}),
 }));
 
-export default useCounterStore;
+export default useStore;

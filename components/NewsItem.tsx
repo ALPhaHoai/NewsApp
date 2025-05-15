@@ -1,6 +1,5 @@
 import React, {memo} from 'react';
 import {
-  Image,
   ImageStyle,
   StyleSheet,
   Text,
@@ -10,6 +9,8 @@ import {
 } from 'react-native';
 import Svg, {Circle, Rect} from 'react-native-svg';
 import {NewsItemProps} from '@type/types.ts';
+import moment from 'moment';
+import FastImage from 'react-native-fast-image';
 
 const DefaultNewsSvg = () => (
   <Svg width={100} height={80} viewBox="0 0 100 80">
@@ -23,14 +24,14 @@ const DefaultNewsSvg = () => (
 
 const NewsItem: React.FC<NewsItemProps> = ({item, onPress}) => {
   // Supports enclosure?.@_url as fallback for RSS feeds
-  const mainImage = item.image || item.enclosure?.['@_url'];
+  const mainImage = item.image;
 
   const renderImage = () => {
     if (Array.isArray(item.images) && item.images.length) {
       return (
         <View style={styles.imagesRow}>
           {item.images.map((img, idx) => (
-            <Image
+            <FastImage
               key={idx}
               source={{uri: img}}
               style={styles.multiImage}
@@ -42,7 +43,7 @@ const NewsItem: React.FC<NewsItemProps> = ({item, onPress}) => {
     }
     if (mainImage) {
       return (
-        <Image
+        <FastImage
           source={{uri: mainImage}}
           style={styles.newsImage}
           resizeMode="cover"
@@ -65,7 +66,7 @@ const NewsItem: React.FC<NewsItemProps> = ({item, onPress}) => {
           <View style={styles.newsMeta}>
             <Text style={styles.newsSource}>{item.source}</Text>
             <Text style={styles.newsTime}>
-              {item.time ? ` · ${item.time}` : ''}
+              {item.time ? ` · ${moment(item.time).fromNow()}` : ''}
             </Text>
           </View>
         </View>

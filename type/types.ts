@@ -8,10 +8,12 @@ export type NewsItemType = {
   source: string;
   time: string;
   link?: string;
+  description?: string;
 };
 
 export type ArticleBodyProps = {
-  items: ArticleItem[];
+  article: NewsItemType;
+  items: ArticleBodyItem[];
   currentSpokenId?: string | null;
   currentSpokenSubTextId?: string | null;
 };
@@ -40,7 +42,7 @@ export type ParagraphSubText = {
   id: string; // uuid
 };
 
-export type ArticleItem = ParagraphItem | ImageItem;
+export type ArticleBodyItem = ParagraphItem | ImageItem;
 
 export type TabType = {
   label: string;
@@ -56,3 +58,22 @@ export type NewsItemProps = {
   item: NewsItemType;
   onPress?: () => void;
 };
+
+export interface ParsedVnExpressFigure {
+  image: string;
+  caption?: string;
+}
+
+export interface ParsedVnExpressArticle {
+  url?: string;
+  title: string;
+  description: string;
+  breadcrumbs: string[];
+  category?: string; // the leaf
+  publishDate: string;
+  author: string;
+  image: string;
+  contentHtml: string;
+  content: ArticleBodyItem[];
+  figures: ParsedVnExpressFigure[];
+}

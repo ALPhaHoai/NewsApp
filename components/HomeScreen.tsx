@@ -17,6 +17,7 @@ import {NewsItemType} from '@type/types.ts';
 import NewsSectionTabs from './NewsSectionTabs';
 import NewsItem from './NewsItem';
 import BottomNavigationBar from './BottomNavigationBar';
+import useStore from '@store/useStore.ts';
 
 const rssLinks = [
   'https://vnexpress.net/rss/tin-moi-nhat.rss',
@@ -45,8 +46,10 @@ const separator = () => <View style={styles.separator} />;
 
 // Receive navigation prop from react-navigation
 const HomeScreen = ({navigation}) => {
-  const [data, setData] = useState<NewsItemType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const data = useStore(state => state.data);
+  const setData = useStore(state => state.setData);
+  const homeLoading = useStore(state => state.homeLoading);
+  const setHomeLoading = useStore(state => state.setHomeLoading);
   const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = async () => {
@@ -54,9 +57,7 @@ const HomeScreen = ({navigation}) => {
     try {
       const arrOfArr = await Promise.all(rssLinks.map(fetchRssData));
       let allNews = arrOfArr.flatMap(news => news.items);
-      allNews = allNews.sort(
-        (a, b) => Date.parse(b.pubDate || '') - Date.parse(a.pubDate || ''),
-      );
+      allNews = allNews.sort((a, b) => (b.time || 0) - (a.time || 0));
       const seen = new Set<number>();
       allNews = allNews.filter(item => {
         if (!item.id) {
@@ -76,30 +77,10 @@ const HomeScreen = ({navigation}) => {
 
   useEffect(() => {
     (async () => {
-      await Tts.setDefaultLanguage('vi-VN');
-    })();
-    (async () => {
-      await openDB();
-      await initNewsTable();
-    })();
-    (async () => {
-      try {
-        const cachedNews = await getAllNews();
-        if (Array.isArray(cachedNews)) {
-          setData(cachedNews);
-        }
-      } catch (e) {}
-      setLoading(false);
-    })();
-  }, []);
-  useEffect(() => {
-    (async () => {
       try {
         const arrOfArr = await Promise.all(rssLinks.map(fetchRssData));
         let allNews = arrOfArr.flatMap(news => news.items);
-        allNews = allNews.sort(
-          (a, b) => Date.parse(b.pubDate || '') - Date.parse(a.pubDate || ''),
-        );
+        allNews = allNews.sort((a, b) => (b.time || 0) - (a.time || 0));
         const seen = new Set<number>();
         allNews = allNews.filter(item => {
           if (!item.id) {
@@ -111,10 +92,23 @@ const HomeScreen = ({navigation}) => {
           seen.add(item.id);
           return true;
         });
-        await insertNewsBatch(allNews);
-        setData(allNews);
+
+        const newsArray: NewsItemType[] = allNews.map(function (item) {
+          return {
+            ...item,
+            id: item.id,
+            title: item.title,
+            image: item.image || item.enclosure?.['@_url'],
+            source: item.source,
+            time: item.time,
+            link: item.link || item.guid,
+            description: item.description,
+          };
+        });
+        await insertNewsBatch(newsArray);
+        setData(newsArray);
       } catch (_) {}
-      setLoading(false);
+      setHomeLoading(false);
     })();
   }, []);
   return (
@@ -128,7 +122,7 @@ const HomeScreen = ({navigation}) => {
         <Icon name="account-circle-outline" size={28} color="#fff" />
       </View>
       {/* News List */}
-      {loading ? (
+      {homeLoading ? (
         <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}>
           <Text>Loading...</Text>
         </View>
@@ -139,7 +133,9 @@ const HomeScreen = ({navigation}) => {
           renderItem={({item}) => (
             <NewsItem
               item={item}
-              onPress={() => navigation.navigate('ArticleScreen', {item})}
+              onPress={() =>
+                navigation.navigate('ArticleScreen', {article: item})
+              }
             />
           )}
           keyExtractor={item => item.id.toString()}
