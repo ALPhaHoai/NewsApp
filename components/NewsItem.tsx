@@ -1,11 +1,11 @@
 import React, {memo} from 'react';
-import {View, Text, Image, TouchableOpacity, StyleSheet, ImageStyle, ViewStyle} from 'react-native';
-import Tts from 'react-native-tts';
-import Svg, {Rect, Path, Circle} from 'react-native-svg';
+import {Image, ImageStyle, StyleSheet, Text, TouchableOpacity, View, ViewStyle} from 'react-native';
+import Svg, {Circle, Rect} from 'react-native-svg';
 import {NewsItemType} from '../types';
 
 type Props = {
     item: NewsItemType;
+    onPress?: () => void;
 };
 
 const DefaultNewsSvg = () => (
@@ -18,12 +18,7 @@ const DefaultNewsSvg = () => (
     </Svg>
 );
 
-const NewsItem: React.FC<Props> = ({item}) => {
-    const onPress = () => {
-        Tts.stop();
-        Tts.speak(item.title);
-    };
-
+const NewsItem: React.FC<Props> = ({item, onPress}) => {
     // Supports enclosure?.@_url as fallback for RSS feeds
     const mainImage = item.image || item.enclosure?.['@_url'];
 
