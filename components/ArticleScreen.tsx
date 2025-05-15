@@ -15,7 +15,14 @@ import Tts from 'react-native-tts';
 import axios from 'axios';
 import TTSButton from '@components/TTSButton.tsx';
 import ArticleBody from '@components/ArticleBody.tsx';
-import {ArticleItem, ImageItem, ParagraphItem} from '@type/types.ts';
+import {
+  ArticleBodyRef,
+  ArticleItem,
+  ImageItem,
+  ParagraphItem,
+  ParagraphSubText,
+} from '@type/types.ts';
+import {v4 as uuidv4} from 'uuid';
 
 const PAUSE_MS = 1100;
 
@@ -26,6 +33,11 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
   const readingRef = useRef(reading);
   const [items, setItems] = useState<ArticleItem[] | null>(null);
   const [currentSpokenId, setCurrentSpokenId] = useState<string | null>(null);
+  const [currentSpokenSubTextId, setCurrentSpokenSubTextId] = useState<
+    string | null
+  >(null);
+  const articleBodyRef = useRef<ArticleBodyRef>(null);
+
   const mainImage = item.image || item.enclosure?.['@_url'];
 
   useEffect(() => {
@@ -39,9 +51,10 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
 
     const speakableItems: ParagraphItem[] = [
       ...items.filter(isParagraph).map(i => ({
+        ...i,
         id: i.id!,
         text: i.text,
-        type: 'paragraph' as const, // Add the type property!
+        type: 'paragraph' as const,
       })),
     ].filter(i => i.text);
 
@@ -56,37 +69,60 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
     let idx = 0;
 
     const speakNext = async () => {
-      // If already stopped, bail out
       if (!readingRef.current) {
         await Tts.stop();
         Tts.removeAllListeners('tts-finish');
         setReading(false);
         setCurrentSpokenId(null);
+        setCurrentSpokenSubTextId(null);
         return;
       }
+
       if (idx < speakableItems.length) {
         setCurrentSpokenId(speakableItems[idx].id);
-        Tts.speak(speakableItems[idx].text);
-        idx++;
+
+        const subTexts = speakableItems[idx].subTexts || [];
+        let subIdx = 0;
+
+        const speakSubNext = async () => {
+          if (!readingRef.current || subIdx >= subTexts.length) {
+            setCurrentSpokenSubTextId(null);
+            return;
+          }
+          const subText = subTexts[subIdx];
+          setCurrentSpokenSubTextId(subText.id);
+
+          // SCROLL to subtext in ArticleBody
+          articleBodyRef.current?.scrollToSubText(
+            speakableItems[idx].id,
+            subText.id,
+          );
+
+          Tts.speak(subText.text);
+        };
+
+        const subFinish = () => {
+          subIdx++;
+          if (subIdx < subTexts.length) {
+            setTimeout(speakSubNext, 200);
+          } else {
+            Tts.removeAllListeners('tts-finish');
+            setCurrentSpokenSubTextId(null);
+            idx++;
+            setTimeout(speakNext, PAUSE_MS);
+          }
+        };
+
+        Tts.removeAllListeners('tts-finish');
+        Tts.addEventListener('tts-finish', subFinish);
+        await speakSubNext();
       } else {
         Tts.removeAllListeners('tts-finish');
         setReading(false);
         setCurrentSpokenId(null);
+        setCurrentSpokenSubTextId(null);
       }
     };
-
-    const onFinish = () => {
-      if (idx < speakableItems.length) {
-        setTimeout(speakNext, PAUSE_MS);
-      } else {
-        Tts.removeAllListeners('tts-finish');
-        setReading(false);
-        setCurrentSpokenId(null);
-      }
-    };
-
-    Tts.removeAllListeners('tts-finish');
-    Tts.addEventListener('tts-finish', onFinish);
 
     await speakNext();
   };
@@ -122,16 +158,7 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
       }
       const contentItems = extractOrderedArticleContent(result);
       if (contentItems?.length) {
-        // Assign unique id for each item
-        let paraCount = 1,
-          imgCount = 1;
-        const contentItemsWithId = contentItems.map(c => ({
-          ...c,
-          id:
-            c.type === 'paragraph'
-              ? `paragraph_${paraCount++}`
-              : `image_${imgCount++}`,
-        }));
+        const contentItemsWithId = preprocessItems(contentItems);
         setItems(contentItemsWithId);
       }
     })();
@@ -172,7 +199,12 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
         </View>
 
         {items?.length ? (
-          <ArticleBody items={items} currentSpokenId={currentSpokenId} />
+          <ArticleBody
+            ref={articleBodyRef}
+            items={items}
+            currentSpokenId={currentSpokenId}
+            currentSpokenSubTextId={currentSpokenSubTextId}
+          />
         ) : item.description ? (
           <Text style={styles.desc}>{removeTags(item.description)}</Text>
         ) : null}
@@ -400,6 +432,34 @@ export function isParagraph(item: ArticleItem): item is ParagraphItem {
 
 export function isImage(item: ArticleItem): item is ImageItem {
   return item.type === 'image';
+}
+
+export function preprocessItems(items: ArticleItem[]): ArticleItem[] {
+  let paraCount = 1;
+  let imgCount = 1;
+  let subCount = 1;
+
+  return items.map(item => {
+    if (item.type === 'paragraph') {
+      const subTexts: ParagraphSubText[] = item.text
+        .split(/[,.]/)
+        .map(s => ({
+          text: s.trim(),
+          id: (subCount++).toString(),
+        }))
+        .filter(sub => sub.text); // remove any empty splits
+      return {
+        ...item,
+        id: `paragraph_${paraCount++}`,
+        subTexts,
+      };
+    } else {
+      return {
+        ...item,
+        id: `image_${imgCount++}`,
+      };
+    }
+  });
 }
 
 export default ArticleScreen;

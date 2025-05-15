@@ -100,7 +100,7 @@ const HomeScreen = ({navigation}) => {
         allNews = allNews.sort(
           (a, b) => Date.parse(b.pubDate || '') - Date.parse(a.pubDate || ''),
         );
-        const seen = new Set<string>();
+        const seen = new Set<number>();
         allNews = allNews.filter(item => {
           if (!item.id) {
             return false;

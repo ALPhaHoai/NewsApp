@@ -13,12 +13,18 @@ export type NewsItemType = {
 export type ArticleBodyProps = {
   items: ArticleItem[];
   currentSpokenId?: string | null;
+  currentSpokenSubTextId?: string | null;
+};
+
+export type ArticleBodyRef = {
+  scrollToSubText: (itemId: string, subTextId: string) => void;
 };
 
 export type ParagraphItem = {
   type: 'paragraph';
   text: string;
-  id?: string;
+  id: string;
+  subTexts?: ParagraphSubText[];
 };
 
 export type ImageItem = {
@@ -27,6 +33,11 @@ export type ImageItem = {
   alt?: string;
   caption?: string;
   id?: string;
+};
+
+export type ParagraphSubText = {
+  text: string;
+  id: string; // uuid
 };
 
 export type ArticleItem = ParagraphItem | ImageItem;
