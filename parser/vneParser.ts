@@ -1,60 +1,57 @@
 import {parseDocument} from 'htmlparser2';
-import {Element, Document} from 'domhandler';
+import {Element} from 'domhandler';
 import {selectAll, selectOne} from 'css-select';
-import {getAttributeValue, getText, getOuterHTML} from 'domutils';
+import render from 'dom-serializer';
+import {getAttributeValue, textContent} from 'domutils';
 import {
   ArticleBodyItem,
   ParsedVnExpressArticle,
   ParsedVnExpressFigure,
 } from '@type/types.ts';
+import {
+  getAttr,
+  getTextContent,
+  pickImageUrlFromBlock,
+  selectAllText,
+} from '@utils/parser';
 
 export function parseVnExpress(html?: string | null): ParsedVnExpressArticle {
   const doc = parseDocument(html || '');
 
-  const getAttr = (selector: string, attr: string) =>
-    getAttributeValue(selectOne(selector, doc), attr) || '';
-
-  const getTextContent = (selector: string) =>
-    getText(selectOne(selector, doc) as Element)?.trim() || '';
-
-  const selectAllText = (selector: string) =>
-    selectAll(selector, doc)
-      .map(el => getText(el).trim())
-      .filter(Boolean);
-
   const title =
-    getAttr('meta[property="og:title"]', 'content') ||
-    getTextContent('title') ||
-    getTextContent('h1.title-detail') ||
+    getAttr('meta[property="og:title"]', doc, 'content') ||
+    getTextContent('title', doc) ||
+    getTextContent('h1.title-detail', doc) ||
     '';
 
   const description =
-    getAttr('meta[property="og:description"]', 'content') ||
-    getAttr('meta[name="description"]', 'content') ||
-    getTextContent('p.description') ||
+    getAttr('meta[property="og:description"]', doc, 'content') ||
+    getAttr('meta[name="description"]', doc, 'content') ||
+    getTextContent('p.description', doc) ||
     '';
 
-  const breadcrumbs = selectAllText('ul.breadcrumb li');
+  const breadcrumbs = selectAllText('ul.breadcrumb li', doc);
   const category = breadcrumbs.at(-1);
 
   const publishDate =
-    getAttr('meta[itemprop="datePublished"]', 'content') ||
-    getAttr('meta[name="pubdate"]', 'content') ||
-    getTextContent('.date');
+    getAttr('meta[itemprop="datePublished"]', doc, 'content') ||
+    getAttr('meta[name="pubdate"]', doc, 'content') ||
+    getTextContent('.date', doc);
 
   let author =
     getTextContent(
       ".fck_detail p[style*='text-align:right'], .fck_detail p[align='right']",
+      doc,
     )
       .replace(/^by\s+/i, '')
       .trim() ||
-    getAttr('meta[name="author"]', 'content') ||
+    getAttr('meta[name="author"]', doc, 'content') ||
     '';
 
-  const url = getAttr('link[rel="canonical"]', 'href') || '';
+  const url = getAttr('link[rel="canonical"]', doc, 'href') || '';
 
-  const article = selectOne('article.fck_detail', doc) as Element;
-  const contentHtml = article ? getOuterHTML(article).trim() : '';
+  const article = selectOne('article.fck_detail', doc) as Element | null;
+  const contentHtml = article ? render(article).trim() : '';
 
   const content: ArticleBodyItem[] = [];
 
@@ -74,7 +71,7 @@ export function parseVnExpress(html?: string | null): ParsedVnExpressArticle {
         !node.attribs?.class?.includes('Image') &&
         !node.attribs?.class?.includes('description')
       ) {
-        const text = getText(node).trim();
+        const text = textContent(node).trim();
         if (text) {
           content.push({
             type: 'paragraph',
@@ -85,10 +82,10 @@ export function parseVnExpress(html?: string | null): ParsedVnExpressArticle {
       }
 
       if (node.name === 'figure') {
-        const block = getOuterHTML(node);
+        const block = render(node);
         const image = pickImageUrlFromBlock(block);
         const caption =
-          getText(selectOne('figcaption', node) as Element)?.trim() || '';
+          textContent(selectOne('figcaption', node) as Element)?.trim() || '';
         if (image) {
           content.push({
             type: 'image',
@@ -126,7 +123,7 @@ export function parseVnExpress(html?: string | null): ParsedVnExpressArticle {
   const figures: ParsedVnExpressFigure[] = [];
   const figureEls = selectAll('figure', article);
   for (const figure of figureEls) {
-    const block = getOuterHTML(figure);
+    const block = render(figure);
     const image = pickImageUrlFromBlock(block);
     const caption =
       getText(selectOne('figcaption', figure) as Element)?.trim() || '';
@@ -136,7 +133,7 @@ export function parseVnExpress(html?: string | null): ParsedVnExpressArticle {
   }
 
   let image =
-    getAttr('meta[property="og:image"]', 'content') ||
+    getAttr('meta[property="og:image"]', doc, 'content') ||
     (figures[0]?.image ?? '');
 
   if (!image && article) {
@@ -160,57 +157,4 @@ export function parseVnExpress(html?: string | null): ParsedVnExpressArticle {
     content,
     figures,
   };
-}
-
-// Helpers (same as before)
-function pickImageUrlFromBlock(block: string): string | null {
-  const doc = parseDocument(block);
-
-  // 1. Look for <source data-srcset="...">
-  const source = selectOne('source', doc) as Element;
-  const srcset = source?.attribs?.['data-srcset'];
-  if (srcset) {
-    const best = pickBestSrcset(srcset);
-    if (best && !isSvgUrl(best)) {
-      return best;
-    }
-  }
-
-  // 2. Fallback to <img src="...">
-  const img = selectOne('img', doc) as Element;
-  const src = img?.attribs?.['data-src'] || img?.attribs?.src;
-  if (
-    src &&
-    !isSvgUrl(src) &&
-    !src.startsWith('data:image/gif;base64,R0lGODlhAQABAAAAA')
-  ) {
-    return src;
-  }
-
-  return null;
-}
-
-function pickBestSrcset(srcset: string): string | null {
-  if (!srcset) {
-    return null;
-  }
-  const urls = srcset
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
-  if (urls.length === 0) {
-    return null;
-  }
-  return urls[urls.length - 1].split(' ')[0];
-}
-
-function isSvgUrl(url: string): boolean {
-  if (!url) {
-    return false;
-  }
-  if (url.startsWith('data:image/svg')) {
-    return true;
-  }
-  const cleaned = url.split('?')[0].split('#')[0];
-  return cleaned.toLowerCase().endsWith('.svg');
 }
