@@ -101,32 +101,70 @@ const CloseIcon = ({
   </Text>
 );
 
+const RotateIcon = ({size = 24, color = '#fff'}) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M20 8V4h-4"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M4 12a8 8 0 0 1 14-5.292M20 4v4h-4"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
 // ==============================
 //       MAIN COMPONENT
 // ==============================
 const ZoomOverlay: React.FC = () => {
   const {visible, source, caption, fallbackTitle, hideOverlay} = useZoomStore();
 
-  // All gesture and animated logic is local to the overlay
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
   const rotation = useSharedValue(0);
   const savedRotation = useSharedValue(0);
 
+  const translateX = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  // --- PINCH ZOOM ---
   const pinchGesture = Gesture.Pinch()
     .onUpdate(e => {
       scale.value = Math.max(1, Math.min(savedScale.value * e.scale, 4));
     })
     .onEnd(() => {
       savedScale.value = scale.value;
+      // when zoomed out, reset pan to zero
+      if (scale.value === 1) {
+        translateX.value = 0;
+        savedTranslateX.value = 0;
+        translateY.value = 0;
+        savedTranslateY.value = 0;
+      }
     });
-  const rotateGesture = Gesture.Rotation()
+
+  // --- PAN DRAG ---
+  // (Let pan work only if zoomed!)
+  const panGesture = Gesture.Pan()
     .onUpdate(e => {
-      rotation.value = savedRotation.value + e.rotation;
+      if (scale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      }
     })
     .onEnd(() => {
-      savedRotation.value = rotation.value;
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
     });
+
   const doubleTapGesture = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
@@ -134,28 +172,25 @@ const ZoomOverlay: React.FC = () => {
       savedScale.value = 1;
       rotation.value = withSpring(0);
       savedRotation.value = 0;
+      translateX.value = withSpring(0);
+      savedTranslateX.value = 0;
+      translateY.value = withSpring(0);
+      savedTranslateY.value = 0;
     });
 
   const composedGesture = Gesture.Simultaneous(
-    Gesture.Simultaneous(pinchGesture, rotateGesture),
+    Gesture.Simultaneous(pinchGesture, panGesture),
     doubleTapGesture,
   );
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
+      {translateX: translateX.value},
+      {translateY: translateY.value},
       {scale: scale.value},
       {rotate: `${(rotation.value * 180) / Math.PI}deg`},
     ],
   }));
-
-  useEffect(() => {
-    if (!visible) {
-      scale.value = 1;
-      savedScale.value = 1;
-      rotation.value = 0;
-      savedRotation.value = 0;
-    }
-  }, [visible, scale, savedScale, rotation, savedRotation]);
 
   if (!visible || !source) {
     return null;
@@ -171,9 +206,18 @@ const ZoomOverlay: React.FC = () => {
             resizeMode="contain"
           />
         </GestureDetector>
-
-        {/* Redesigned, modern floating button group */}
+        {/* FAB Buttons */}
         <View style={styles.fabMenu}>
+          <TouchableOpacity
+            style={[styles.fabButton, styles.fabRotate]}
+            onPress={() => {
+              rotation.value = withSpring(rotation.value + Math.PI / 2);
+              savedRotation.value = rotation.value + Math.PI / 2;
+            }}
+            activeOpacity={0.85}>
+            <RotateIcon />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.fabButton, styles.fabDownload]}
             onPress={() =>
@@ -182,6 +226,7 @@ const ZoomOverlay: React.FC = () => {
             activeOpacity={0.8}>
             <DownloadIcon />
           </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.fabButton, styles.fabClose]}
             onPress={hideOverlay}
@@ -194,9 +239,7 @@ const ZoomOverlay: React.FC = () => {
   );
 };
 
-// ==============================
-//            STYLES
-// ==============================
+// --- STYLES ---
 const FAB_SIZE = 44;
 
 const styles = StyleSheet.create({
@@ -236,6 +279,9 @@ const styles = StyleSheet.create({
   },
   fabDownload: {
     backgroundColor: 'rgba(38,42,54,0.93)',
+  },
+  fabRotate: {
+    backgroundColor: 'rgba(72,132,255,0.93)',
   },
   fabClose: {
     backgroundColor: 'rgba(232,45,66,0.93)',
