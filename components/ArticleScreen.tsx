@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   Share,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Tts from 'react-native-tts';
@@ -32,6 +33,7 @@ const PAUSE_MS = 1100;
 const ArticleScreen: React.FC<any> = ({route, navigation}) => {
   const {article} = route.params;
   const [reading, setReading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const readingRef = useRef(reading);
   const [bodyItems, setBodyItems] = useState<ArticleBodyItem[] | null>(null);
   const [currentSpokenId, setCurrentSpokenId] = useState<string | null>(null);
@@ -152,27 +154,47 @@ const ArticleScreen: React.FC<any> = ({route, navigation}) => {
 
   useEffect(() => {
     (async () => {
+      console.log('Fetching article:', article.link);
+      setLoading(true);
       let result: string | null = null;
       try {
         const res = await axios.get(article.link);
         result = res.data;
+        console.log('Successfully fetched data. Data length:', result?.length);
       } catch (e) {
-        console.error(e);
+        console.error('Error fetching article:', e);
       }
+      setLoading(false);
+
       if (!result) {
+        console.log('No article content returned. (result is null or empty)');
         return;
       }
+
+      console.log('Parsing article...');
       const articleDetail = parseVnExpress(result);
+      console.log('Parsed article detail:', articleDetail);
 
       if (articleDetail) {
+        console.log('Preprocessing items...');
         preprocessItems(articleDetail);
         setBodyItems(articleDetail.content);
+        console.log('Set bodyItems, total:', articleDetail.content?.length);
+      } else {
+        console.log('Parsing failed: articleDetail is null');
       }
     })();
   }, [article.link]);
 
   return (
     <SafeAreaView style={{flex: 1, backgroundColor: '#fff'}}>
+      {/* LOADING OVERLAY */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#039ed8" />
+        </View>
+      )}
+
       {/* Top Bar */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -318,6 +340,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#eee',
     backgroundColor: '#fff',
+  },
+  // LOADING OVERLAY ADDED HERE
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
 });
 

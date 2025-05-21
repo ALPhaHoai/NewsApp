@@ -10,6 +10,7 @@ import {getAllNews, initNewsTable, openDB} from './db.ts';
 import useStore from '@store/useStore.ts';
 import ZoomOverlay from '@components/ZoomOverlay.tsx';
 import useZoomStore from '@store/useZoomStore.ts';
+import {useBlockBackHandler} from './useBlockBackHandler.ts';
 
 const Stack = createStackNavigator();
 
@@ -23,6 +24,9 @@ const Stack = createStackNavigator();
 
 export default function App() {
   const {visible} = useZoomStore();
+
+  // To only block back:
+  useBlockBackHandler(visible);
 
   useEffect(() => {
     (async () => {
