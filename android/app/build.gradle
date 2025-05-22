@@ -2,11 +2,23 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Add this to integrate react-native-config for reading .env files
+project.ext.envConfigFiles = [
+    dev: ".env.dev",
+    staging: ".env.staging",
+    prod: ".env.prod"
+]
+apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
+println "Loaded ANDROID_APPLICATION_ID: ${project.env.get('ANDROID_APPLICATION_ID')}"
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
  */
 react {
+    // Add debuggable variants for each flavor to skip bundling in debug mode
+    debuggableVariants = ["devDebug", "stagingDebug", "prodDebug"]
+
     /* Folders */
     //   The root of your project, i.e. where "package.json" lives. Default is '../..'
     // root = file("../../")
@@ -61,14 +73,6 @@ def enableProguardInReleaseBuilds = false
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
- *
- * For example, to use the international variant, you can use:
- * `def jscFlavor = io.github.react-native-community:jsc-android-intl:2026004.+`
- *
- * The international variant includes ICU i18n library and necessary data
- * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
- * give correct results when using with locales other than en-US. Note that
- * this variant is about 6MiB larger per architecture than default.
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
@@ -78,6 +82,29 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.newsapp"
+
+    // Add flavor dimensions for product flavors
+    flavorDimensions "app"
+
+    // Define product flavors
+    productFlavors {
+        dev {
+            dimension "app"
+            applicationId project.env.get("ANDROID_APPLICATION_ID")
+            resValue "string", "app_name", project.env.get("ANDROID_APPLICATION_NAME")
+        }
+        staging {
+            dimension "app"
+            applicationId project.env.get("ANDROID_APPLICATION_ID")
+            resValue "string", "app_name", project.env.get("ANDROID_APPLICATION_NAME")
+        }
+        prod {
+            dimension "app"
+            applicationId project.env.get("ANDROID_APPLICATION_ID")
+            resValue "string", "app_name", project.env.get("ANDROID_APPLICATION_NAME")
+        }
+    }
+
     defaultConfig {
         applicationId "com.newsapp"
         minSdkVersion rootProject.ext.minSdkVersion
